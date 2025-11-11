@@ -1,0 +1,64 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"weather-tracker/internal/parser"
+)
+
+func main() {
+	// Флаги командной строки
+	interval := flag.Duration("interval", 30*time.Minute, "Интервал обновления погоды (например: 30m, 1h)")
+	once := flag.Bool("once", false, "Получить погоду один раз и выйти")
+	flag.Parse()
+
+	weatherParser := parser.NewParser()
+
+	if *once {
+		getAndPrintWeather(weatherParser)
+		return
+	}
+
+	fmt.Println("Запуск отслеживания погоды...")
+	fmt.Printf("Интервал обновления: %v\n", *interval)
+	fmt.Println("Для выхода нажмите Ctrl+C")
+	fmt.Println()
+
+	// Первое получение погоды
+	getAndPrintWeather(weatherParser)
+
+	// Запуск периодического обновления
+	ticker := time.NewTicker( *interval)
+	defer ticker.Stop()
+
+	// Обработка сигналов для graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-ticker.C:
+			getAndPrintWeather(weatherParser)
+		case <-sigChan:
+			fmt.Println("\nЗавершение работы...")
+			return
+		}
+	}
+}
+
+func getAndPrintWeather(p *parser.Parser) {
+	weather, err := p.GetWeather()
+	if err != nil {
+		log.Printf("Ошибка получения погоды: %v", err)
+		return
+	}
+
+	p.PrintWeather(weather)
+	fmt.Println()
+}
